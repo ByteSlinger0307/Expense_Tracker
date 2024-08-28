@@ -58,14 +58,6 @@ The Expense Tracker is a Python-based application designed to help users manage 
 
 Further documentation on each module and method can be found in the `docs` directory or by accessing the in-application help menu.
 
-## Examples
-
-Here is a sample snippet to add a new expense programmatically:
-```python
-from expense_tracker import ExpenseTracker
-expense_tracker = ExpenseTracker()
-expense_tracker.add_expense("2024-08-29", "Lunch", 15.00, "Food")
-
 ## Troubleshooting
 
 - **Installation Issues**: Ensure all dependencies are installed using the `requirements.txt` file.
