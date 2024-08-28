@@ -6,6 +6,8 @@ import os
 from datetime import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 class Expense:
     def __init__(self, date, description, amount, category="Uncategorized"):
@@ -76,8 +78,11 @@ class ExpenseTracker:
         bar_graph_button = ttk.Button(button_frame, text="Show Category Bar Graph", command=self.show_category_bar_graph)
         bar_graph_button.grid(row=0, column=4, padx=10)
 
+        predict_button = ttk.Button(button_frame, text="Predict Future Expenses", command=self.predict_future_expenses)
+        predict_button.grid(row=0, column=5, padx=10)
+
         manage_categories_button = ttk.Button(button_frame, text="Manage Categories", command=self.open_category_manager)
-        manage_categories_button.grid(row=0, column=5, padx=10)
+        manage_categories_button.grid(row=0, column=6, padx=10)
 
         exit_button = ttk.Button(self.root, text="Exit", command=self.root.quit)
         exit_button.pack(pady=20)
@@ -184,8 +189,51 @@ class ExpenseTracker:
         plt.xlabel('Category')
         plt.ylabel('Amount')
         plt.xticks(rotation=45)
+        plt.grid(axis='y')
         plt.tight_layout()
         plt.show()
+
+    def predict_future_expenses(self):
+        if not self.expenses:
+            messagebox.showwarning("No Data", "Not enough data to make predictions.")
+            return
+
+        # Convert expenses to DataFrame
+        data = {
+            "Date": [expense.date for expense in self.expenses],
+            "Amount": [expense.amount for expense in self.expenses]
+        }
+        df = pd.DataFrame(data)
+        df['Date'] = pd.to_datetime(df['Date'])
+        df['Days'] = (df['Date'] - df['Date'].min()).dt.days
+
+        # Prepare data for model
+        X = df[['Days']].values.reshape(-1, 1)
+        y = df['Amount'].values
+
+        # Train model
+        model = LinearRegression()
+        model.fit(X, y)
+
+        # Predict future expenses
+        future_days = np.arange(df['Days'].max() + 1, df['Days'].max() + 31).reshape(-1, 1)  # Next 30 days
+        predictions = model.predict(future_days)
+
+        # Plot predictions
+        plt.figure(figsize=(10, 6))
+        plt.plot(df['Date'], df['Amount'], marker='o', linestyle='-', color='blue', label='Historical Data')
+        future_dates = [df['Date'].max() + pd.Timedelta(days=int(day)) for day in future_days.flatten()]
+        plt.plot(future_dates, predictions, marker='x', linestyle='--', color='red', label='Predicted Data')
+        plt.title('Expense Prediction')
+        plt.xlabel('Date')
+        plt.ylabel('Amount')
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    def open_category_manager(self):
+        CategoryManager(self.root, self.category_file)
 
     def clear_entries(self):
         self.description_entry.delete(0, tk.END)
@@ -193,92 +241,108 @@ class ExpenseTracker:
         self.category_dropdown.set("Uncategorized")
 
     def save_expenses(self):
-        # Write expenses to the CSV file
-        with open(self.filename, "w", newline="") as file:
+        with open(self.filename, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(["Date", "Description", "Amount", "Category"])  # Write header row
+            writer.writerow(["Date", "Description", "Amount", "Category"])
             for expense in self.expenses:
-                writer.writerow([expense.date, expense.description, expense.amount, expense.category])  # Write each expense
+                writer.writerow([expense.date, expense.description, expense.amount, expense.category])
 
     def load_expenses(self):
-        # Load expenses from the CSV file
-        if os.path.exists(self.filename):
-            with open(self.filename, "r") as file:
-                reader = csv.DictReader(file)
-                self.expenses = [Expense(row["Date"], row["Description"], float(row["Amount"]), row["Category"]) for row in reader]
-
-    def get_categories(self):
-        # Return categories from the file
-        if os.path.exists(self.category_file):
-            with open(self.category_file, "r") as file:
-                return [row[0] for row in csv.reader(file)]
-        return ["Uncategorized"]
+        if os.path.isfile(self.filename):
+            with open(self.filename, mode='r') as file:
+                reader = csv.reader(file)
+                next(reader)  # Skip header row
+                for row in reader:
+                    if len(row) == 4:
+                        date, description, amount, category = row
+                        self.expenses.append(Expense(date, description, float(amount), category))
 
     def load_categories(self):
-        # Initialize categories if the file does not exist
-        if not os.path.exists(self.category_file):
-            with open(self.category_file, "w", newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow(["Uncategorized"])
+        if os.path.isfile(self.category_file):
+            with open(self.category_file, mode='r') as file:
+                reader = csv.reader(file)
+                self.categories = [row[0] for row in reader]
+        else:
+            self.categories = []
 
-    def open_category_manager(self):
-        CategoryManager(self)
+    def get_categories(self):
+        return self.categories if self.categories else ["Uncategorized"]
 
 class CategoryManager:
-    def __init__(self, tracker):
-        self.tracker = tracker
-        self.top = tk.Toplevel()
-        self.top.title("Category Manager")
-        self.top.geometry("400x300")
+    def __init__(self, root, category_file):
+        self.root = root
+        self.category_file = category_file
+        self.window = tk.Toplevel(root)
+        self.window.title("Manage Categories")
+        self.window.geometry("400x300")
+        self.setup_ui()
 
-        # Frame for category management
-        category_frame = ttk.Frame(self.top)
-        category_frame.pack(pady=20, padx=20, fill='x')
+    def setup_ui(self):
+        ttk.Label(self.window, text="Manage Categories", font=("Arial", 18, "bold")).pack(pady=10)
 
-        # Category listbox
-        self.category_listbox = tk.Listbox(category_frame, font=("Arial", 12), width=30, height=10, bg="#FFFFFF", selectbackground="#D1D1D1")
-        self.category_listbox.pack(side=tk.LEFT, fill=tk.Y)
+        self.category_listbox = tk.Listbox(self.window, font=("Arial", 12), width=50, height=10, bg="#FFFFFF", selectbackground="#D1D1D1")
+        self.category_listbox.pack(pady=10)
 
-        # Scrollbar for listbox
-        scrollbar = tk.Scrollbar(category_frame, orient=tk.VERTICAL, command=self.category_listbox.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.category_listbox.config(yscrollcommand=scrollbar.set)
+        add_category_frame = ttk.Frame(self.window)
+        add_category_frame.pack(pady=10)
 
-        # Frame for adding categories
-        add_frame = ttk.Frame(self.top)
-        add_frame.pack(pady=10, padx=20, fill='x')
-
-        ttk.Label(add_frame, text="New Category:", font=("Arial", 12)).grid(row=0, column=0, padx=10, pady=5, sticky="e")
-        self.new_category_entry = ttk.Entry(add_frame, font=("Arial", 12))
+        ttk.Label(add_category_frame, text="Category Name:", font=("Arial", 12)).grid(row=0, column=0, padx=10, pady=5, sticky="e")
+        self.new_category_entry = ttk.Entry(add_category_frame, font=("Arial", 12))
         self.new_category_entry.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
 
-        add_button = ttk.Button(add_frame, text="Add Category", command=self.add_category)
-        add_button.grid(row=0, column=2, padx=10)
+        add_button = ttk.Button(add_category_frame, text="Add Category", command=self.add_category)
+        add_button.grid(row=1, column=0, columnspan=2, pady=10)
 
-        # Update the listbox with existing categories
-        self.update_category_list()
+        remove_button = ttk.Button(add_category_frame, text="Remove Selected", command=self.remove_category)
+        remove_button.grid(row=2, column=0, columnspan=2, pady=10)
+
+        self.load_categories()
+
+    def load_categories(self):
+        if os.path.isfile(self.category_file):
+            with open(self.category_file, mode='r') as file:
+                reader = csv.reader(file)
+                self.category_listbox.delete(0, tk.END)
+                for row in reader:
+                    if row:
+                        self.category_listbox.insert(tk.END, row[0])
 
     def add_category(self):
-        new_category = self.new_category_entry.get()
-        if new_category and new_category not in self.tracker.get_categories():
-            self.tracker.get_categories().append(new_category)
-            self.update_category_file()
-            self.update_category_list()
-            self.new_category_entry.delete(0, tk.END)
-            print(f"[INFO] Added new category: {new_category}")
+        new_category = self.new_category_entry.get().strip()
+        if new_category:
+            if not self.category_exists(new_category):
+                with open(self.category_file, mode='a', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([new_category])
+                self.category_listbox.insert(tk.END, new_category)
+                self.new_category_entry.delete(0, tk.END)
+                print(f"[INFO] Added Category: {new_category}")
+            else:
+                messagebox.showwarning("Duplicate Category", "This category already exists.")
         else:
-            messagebox.showwarning("Invalid Category", "Category is either empty or already exists.")
+            messagebox.showwarning("Invalid Input", "Category name cannot be empty.")
+
+    def remove_category(self):
+        selected_index = self.category_listbox.curselection()
+        if selected_index:
+            selected_category = self.category_listbox.get(selected_index)
+            if messagebox.askyesno("Confirm", f"Are you sure you want to remove the category '{selected_category}'?"):
+                self.category_listbox.delete(selected_index)
+                self.update_category_file()
+                print(f"[INFO] Removed Category: {selected_category}")
+        else:
+            messagebox.showwarning("Selection Error", "Please select a category to remove.")
 
     def update_category_file(self):
-        with open(self.tracker.category_file, "w", newline="") as file:
+        with open(self.category_file, mode='w', newline='') as file:
             writer = csv.writer(file)
-            for category in self.tracker.get_categories():
+            for category in self.category_listbox.get(0, tk.END):
                 writer.writerow([category])
 
-    def update_category_list(self):
-        self.category_listbox.delete(0, tk.END)
-        for category in self.tracker.get_categories():
-            self.category_listbox.insert(tk.END, category)
+    def category_exists(self, category):
+        with open(self.category_file, mode='r') as file:
+            reader = csv.reader(file)
+            return any(row[0] == category for row in reader)
 
 if __name__ == "__main__":
     root = tk.Tk()
