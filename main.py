@@ -267,9 +267,14 @@ class ExpenseTracker:
                 reader = csv.reader(file)
                 next(reader)  # Skip header
                 for row in reader:
-                    date, description, amount, category = row
-                    self.expenses.append(Expense(date, description, float(amount), category))
+                    # Check if the row has the expected number of values
+                    if len(row) == 4:
+                        date, description, amount, category = row
+                        self.expenses.append(Expense(date, description, float(amount), category))
+                    else:
+                        print(f"[WARNING] Skipped row with unexpected format: {row}")
             print(f"[INFO] Loaded expenses from file: {self.filename}")
+
 
     def save_expenses(self):
         with open(self.filename, 'w', newline='') as file:
