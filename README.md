@@ -68,7 +68,7 @@ Further documentation on each module and method can be found in the `docs` direc
 
 - [Krish Dubey](https://github.com/ByteSlinger0307)
 
-- ## Contact
+## Contact
 
 - **Name**: Krish Dubey
 - **Email**: [dubeykrish0208@gmail.com](mailto:dubeykrish0208@gmail.com)
